@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getDb } from '@/lib/db'
+import { getPool } from '@/lib/db'
 import { Resend } from 'resend'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
@@ -14,16 +14,12 @@ export async function GET(req: NextRequest) {
     .toISOString()
     .slice(0, 10)
 
-  const db = getDb()
-  const total = (
-    db.prepare('SELECT COUNT(*) as total FROM confirmacoes WHERE data = ?').get(hoje) as { total: number }
-  ).total
+  const db = getPool()
+  const result = await db.query('SELECT COUNT(*) as total FROM confirmacoes WHERE data = $1', [hoje])
+  const total = parseInt(result.rows[0].total)
 
   const dataFormatada = new Date(hoje + 'T12:00:00').toLocaleDateString('pt-BR', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
   })
 
   await resend.emails.send({

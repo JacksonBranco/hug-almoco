@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getDb } from '@/lib/db'
+import { getPool, initSchema } from '@/lib/db'
 
 export async function POST(req: NextRequest) {
   const { matricula } = await req.json()
@@ -8,12 +8,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ erro: 'Matrícula obrigatória.' }, { status: 400 })
   }
 
-  const db = getDb()
-  const colaborador = db.prepare('SELECT * FROM colaboradores WHERE matricula = ?').get(matricula.trim())
+  await initSchema()
+  const db = getPool()
+  const result = await db.query('SELECT * FROM colaboradores WHERE matricula = $1', [matricula.trim()])
 
-  if (!colaborador) {
+  if (result.rows.length === 0) {
     return NextResponse.json({ erro: 'Matrícula não encontrada.' }, { status: 404 })
   }
 
-  return NextResponse.json({ colaborador })
+  return NextResponse.json({ colaborador: result.rows[0] })
 }

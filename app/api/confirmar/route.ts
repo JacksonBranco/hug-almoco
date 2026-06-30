@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getDb } from '@/lib/db'
+import { getPool, initSchema } from '@/lib/db'
 
 export async function POST(req: NextRequest) {
   const { matricula } = await req.json()
@@ -8,31 +8,30 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ erro: 'Matrícula obrigatória.' }, { status: 400 })
   }
 
-  // Horário de Brasília
   const agora = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }))
   const hora = agora.getHours()
 
   if (hora < 5 || hora >= 9) {
-    return NextResponse.json(
-      { erro: 'Confirmações aceitas somente entre 5h e 9h.' },
-      { status: 403 }
-    )
+    return NextResponse.json({ erro: 'Confirmações aceitas somente entre 5h e 9h.' }, { status: 403 })
   }
 
   const hoje = agora.toISOString().slice(0, 10)
-  const db = getDb()
+  await initSchema()
+  const db = getPool()
 
-  const jaConfirmou = db
-    .prepare('SELECT id FROM confirmacoes WHERE matricula = ? AND data = ?')
-    .get(matricula.trim(), hoje)
+  const jaConfirmou = await db.query(
+    'SELECT id FROM confirmacoes WHERE matricula = $1 AND data = $2',
+    [matricula.trim(), hoje]
+  )
 
-  if (jaConfirmou) {
+  if (jaConfirmou.rows.length > 0) {
     return NextResponse.json({ erro: 'Você já confirmou seu almoço hoje.' }, { status: 409 })
   }
 
-  db.prepare(
-    'INSERT INTO confirmacoes (matricula, data, confirmado_em) VALUES (?, ?, ?)'
-  ).run(matricula.trim(), hoje, new Date().toISOString())
+  await db.query(
+    'INSERT INTO confirmacoes (matricula, data, confirmado_em) VALUES ($1, $2, $3)',
+    [matricula.trim(), hoje, new Date().toISOString()]
+  )
 
   return NextResponse.json({ mensagem: 'Almoço confirmado com sucesso!' })
 }
@@ -44,10 +43,12 @@ export async function GET(req: NextRequest) {
     .toISOString()
     .slice(0, 10)
 
-  const db = getDb()
-  const confirmacao = db
-    .prepare('SELECT id FROM confirmacoes WHERE matricula = ? AND data = ?')
-    .get(matricula, hoje)
+  await initSchema()
+  const db = getPool()
+  const result = await db.query(
+    'SELECT id FROM confirmacoes WHERE matricula = $1 AND data = $2',
+    [matricula, hoje]
+  )
 
-  return NextResponse.json({ confirmado: !!confirmacao })
+  return NextResponse.json({ confirmado: result.rows.length > 0 })
 }
